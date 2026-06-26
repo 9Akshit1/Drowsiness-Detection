@@ -1,0 +1,14 @@
+Main factors for driver fatigue detection via Camera input:
+- EAR (eye closure percentage) -- done
+- MAR (yawning)  -- done
+- PERCLOS (eye closure over time = blink duration)  -- done
+- Blink frequency  -- done
+- Head gaze or tilt/nodding  -- done
+
+June 26, 2026:
+Add the following stuff:
+- Parameters should be time dependent (like motion based) isntead of just position to be more robust
+- Lookup table (write it in the code and make it easy to change like a dictionary or something probably) of thresholds (backed by research) consisting of different classificaitons
+- get a visual video dataset for drowsiness
+- make a simple classifier (using the dataset, you could also get the thresholds from there)
+- make a report (procedure for final. includes the trial and erorr or like different options went through) for both this distraction thing and also the facial one
