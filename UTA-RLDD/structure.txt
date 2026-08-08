@@ -1,0 +1,12 @@
+UTA-RLDD/<subject_id>/<label>.<ext>
+
+subject_id: any folder name (e.g. 01, 02, ...)
+label: 0 = Alert, 5 = Low Vigilant, 10 = Drowsy
+ext: mov/MOV/mp4, case-insensitive
+
+Example:
+UTA-RLDD/01/0.mov
+UTA-RLDD/01/5.mov
+UTA-RLDD/01/10.MOV
+
+0.<ext> is used as the subject's alert-baseline reference video.

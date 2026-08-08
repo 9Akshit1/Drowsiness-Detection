@@ -5,13 +5,13 @@ Main factors for driver fatigue detection via Camera input:
 - PERCLOS (eye closure over time, basically blink frequency)  -- done
 - Head tilt/nodding  -- done  (dont include gaze for now)
 
-Found from various githubs (everything is in the 'old' folder): 
+Calculations and methods used to extract those features were found from various githubs (everything is in the 'old' folder, which may have been deleted. So if needed, go throguh the github commits to find it): 
 - https://github.com/yaninsanity/openeyes/tree/main
 - https://github.com/SeajalUniyal/driver_fatigue_detection/tree/main
 - https://github.com/erlendskinnemoen/Driver-Monitoring-Systems-using-Google-s-MediaPipe-FaceMesh/tree/main
 - https://github.com/Kartheepan-M/Drowsiness-Detection-using-mediapipe-python/tree/main
 
-Not including driver gaze (aka DISTRACTION) for now as that was already done in the previous project (Car-Sensors).
+Not including driver gaze (aka DISTRACTION DETECTION) for now as that was already done in the previous project (Car-Sensors).
 
 ------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -22,14 +22,14 @@ Add the following stuff:
 - get a visual video dataset for driver drowsiness (found two!), so we can make a simple classifier (where you can calculate the thresholds and weights from that to be able to create a better lookup table)
 
 Resources:
-"Improving Driver Drowsiness Detection via Personalized EAR/MAR Thresholds and CNN-Based Classification" (2026)
-"A Multimodal Systematic Review of Drivers' Fatigue Detection Methodologies, Datasets, and Models" (2026)
-"Drowsiness Detection in Drivers Using Facial Feature Analysis" (2025)
+- "Improving Driver Drowsiness Detection via Personalized EAR/MAR Thresholds and CNN-Based Classification" (2026)
+- "A Multimodal Systematic Review of Drivers' Fatigue Detection Methodologies, Datasets, and Models" (2026)
+- "Drowsiness Detection in Drivers Using Facial Feature Analysis" (2025)
 
 Summary:
 This project implements a robust, real-time driver drowsiness monitoring system optimized for edge computing environments. 
 By integrating computer vision with adaptive signal processing, the system tracks key behavioral indicators—specifically 
-Eye Aspect Ratio (EAR), Mouth Aspect Ratio (MAR), blink frequency, and PERCLOS—alongside dynamic head-pose motion metrics, 
+Eye Aspect Ratio (EAR), Mouth Aspect Ratio (MAR), blink frequency, and Percent of Eye Closure (PERCLOS)—alongside dynamic head-pose motion metrics, 
 such as angular velocity of pitch and tilt. To ensure environmental robustness, the system features a dynamic calibration 
 phase that establishes personalized baseline thresholds for each driver, mitigating variations in facial structure and lighting. 
 To move beyond static rule-based alerts, the system utilizes a lightweight ensemble learning classifier trained on a multi-feature
@@ -150,7 +150,9 @@ Instead of feeding all 150 frames into the classifier, summarize the driver's be
 - Label
 Store this into a dataset (this is the WINDOW DATASET).
 
+------------------------------------------------------------------------------------------------------------------------------------------
 
+July 10, 2026:
 MACHINE LEARNING PLAN (model.py):
 Step 1 — Split the Dataset
 Split the dataset by subject, ensuring that all windows from a given subject belong exclusively to either the training or testing set. This prevents data leakage and evaluates the model's ability to generalize to unseen drivers.
@@ -200,17 +202,53 @@ GUI (but you would also have the two 3D models of the head on the side too. One 
 ----------------------------------------
 |  EAR:                    0.81        |
 |  PERCLOS:               12%          |
-|  Blink Rate:            18/min       |
+|  Blink Rate:            18/s         |
 |  Blink Count:            2           |
 |  MAR:                   0.42         |
 |  Yawn Count:             0           |
 |  Pitch Velocity:       17°/s         |
 |  Nod Count:              0           |
+|  Nod Rate:              0/s          |
 |                                      |
-|  Prediction: LOW VIGILANT            |
+|  Prediction: DROWSY                  |
 |  Confidence: 93.4%                   |
 ----------------------------------------
 
-
-During runtime, every frame has this occuring but you need ot make it smooth and fast:
+During runtime, every frame has the below pipeline occuring but we want it smooth and fast:
 Camera, then MediaPipe, then Landmarks, then Frame features, then Sliding window, then Window features, then Load scaler, then Standardize (using the saved scaler), then Load model, then Predict
+
+------------------------------------------------------------------------------------------------------------------------------------------
+
+July 19-24, 2026:
+Identified bugs like:
+- Noticed that the ML model was giving F1 scores of around 0.44. These are terrible valeusa nd soem of the causes were:
+- pitch/yaw/roll velocity uses a circular (wraparound-safe) angle difference, not naive subtraction -- naive subtraction spiked to ~43,000 deg/s across the +-180 wrap boundary, which is what caused nod-count to trigger every few seconds and pitch-velocity readouts to look wrong in the annotated demo.
+- nod counting is based on angular-prominence peak detection on the pitch signal itself (a genuine nod is a distinct, sufficient excursion), corroborated by a velocity check, instead of counting every raw velocity-threshold crossing.
+- Each frame isnt encessarily the exact video's label. So, we shjould discard the first few minutes of the video.
+- The 3D normalization was failing to work properly causing upside down views or flickerign views.
+- The counts and rates explode or increase even when there was only one event. Like if it was one long held yawn or blink, the coutn and rates would icnrease even though its technically only one event.
+
+------------------------------------------------------------------------------------------------------------------------------------------
+
+July 31st, 2026:
+- Implement a KNN, a Shallow Neural Net. 
+- Draw up a plot/table of all the tested models' evaluation metrics
+- For LEARNING: Learn more indepthly, including the claculations for the ML models. Go to https://carleton.ca/trustcav/workshops-seminars-events/ (password is 2025) and watch the first lecture.
+- Try a longer video size like 10s or 20s, because you are more likely to be drowsy over a longer time
+- For the confidence threshold, instead of doing 50-50 (like if >50% is predicted as drowsy, do drowsy), do like 70% of votes need to be drowsy for it to be drowsy
+- The feature extraction seems too slow, so somethign is causign a bottleneck in the clacualtiosn somehow. Like when i blink fast, it only record a few of those blinks. Similarily, the other features are also feeling very slow to clacualte and update
+- Should the rates be clacualted out of a mintue. I feel like it would make mroe sense to divide it by the time window and keep it out of seconds.
+- Pitch velocity seems maybe slightly wrongly claculated? Like it said i only moved a few degrees even though I moved a decent amount. SO jsut veirfy the claculation.
+- Switch to lower FPS or make the sliding to next window size liek 10 frames instead of 1 frame.
+
+------------------------------------------------------------------------------------------------------------------------------------------
+
+August 7th, 2026:
+- The stride is 1.0 second. The window is 10.0 seconds. The FPS is now 10 fps.
+- Metrics are faster updating now which is good and they seem correct like EAR, MAR, PERCLOS. It's still kinda hard to fully validate pitch velocity but it should be fine surely right? Rates feel kinda pointless/useless in my opinion though. Might need to check feature importance soon to see how important each feature truly is. That way we can display the actually important features in the live GUI instead.
+- Surprisingly, the shallow NN has the lowest latency (0.25ms taken for a prediction each second) and sitll ahs the highest accuracy in all metrics. Crazy.
+- Model prediction feels a little slow as in like, I have to wait a decent amount of time when doing it live for it to switch correctly from drowsy to alert or vie versa. 
+- We can try saving all of the best models from each type and then making them do an ensemble vote for the prediction isntead. But wouldnt this make it kinda slow? Estiamte how slwo thsi woudl maek the real time thing then.
+- Based on all fo the changes we made, I'm wondering if I should rerun the whole dataset again. Should I try using both UTA-RLDD and NTHU for data training or just leave it at NTHU and then use for real deployment.
+- 3D Pose Normalization seems fine to me to be honest, I dont see the need to change it to follow the distraction detection code. We'll probably need to do some sort of comparison or updates with the distraction detection to see if the 3D normalziation used here is better/faster, and also test diff camera angles in thsi drowsienss detection code to see (ideally try from the driver mirror angle, just to see if its still able to extract params properly).
+- Lastly, since this project is done essentially, we can start merging it with the distraction detection code (repository Car-Sensors), since everything up to the mediapipi landmark stuff is the same.

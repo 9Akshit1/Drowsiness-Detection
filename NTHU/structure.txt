@@ -1,0 +1,18 @@
+NTHU/<subject_id>/<category>/<behavior>.<ext>
+NTHU/<subject_id>/<category>/<subject_id>_<behavior>_drowsiness.txt
+
+subject_id: numeric folder name (e.g. 001, 002, ...)
+category: noglasses / glasses / sunglasses / night_noglasses / night_glasses
+behavior: nonsleepyCombination / sleepyCombination / slowBlinkWithNodding / yawning
+ext: avi/mp4, matching whatever the source recording used
+drowsiness.txt: one digit per frame, no delimiters (0 = alert, 1 = drowsy). Optional for
+  slowBlinkWithNodding/yawning, which fall back to a blanket Drowsy label if missing.
+
+Example:
+NTHU/001/noglasses/nonsleepyCombination.avi
+NTHU/001/noglasses/001_nonsleepyCombination_drowsiness.txt
+NTHU/001/noglasses/sleepyCombination.avi
+NTHU/001/noglasses/001_sleepyCombination_drowsiness.txt
+
+Baseline video preference per subject (first category found wins): noglasses, glasses,
+sunglasses, night_glasses, night_noglasses.

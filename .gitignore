@@ -1,5 +1,18 @@
 venv
+openh264-*.dll
 
 NTHU/*
+!NTHU/structure.txt
 
-UTA-RLLD/*
+UTA-RLDD/*
+!UTA-RLDD/structure.txt
+
+outputs/*.csv
+
+outputs/*.bak
+
+METHODS.md
+
+.claude
+
+__pycache__

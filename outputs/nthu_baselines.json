@@ -1,0 +1,254 @@
+{
+  "001": {
+    "ear_baseline": 0.2627451357534596,
+    "mar_baseline": 0.015450398191718298,
+    "pitch_baseline": -4.783495059555269,
+    "yaw_baseline": -23.682057716898804,
+    "roll_baseline": 2.9559589703724263
+  },
+  "002": {
+    "ear_baseline": 0.21629465118842717,
+    "mar_baseline": 0.018313530515180074,
+    "pitch_baseline": -6.747011424648729,
+    "yaw_baseline": -16.53893459854271,
+    "roll_baseline": 7.668274341061235
+  },
+  "003": {
+    "ear_baseline": 0.23319458490705297,
+    "mar_baseline": 0.020470362510484168,
+    "pitch_baseline": -14.051650095171102,
+    "yaw_baseline": -16.263884131925764,
+    "roll_baseline": 2.8585290500595377
+  },
+  "004": {
+    "ear_baseline": 0.2264103732839169,
+    "mar_baseline": 0.008186403661745077,
+    "pitch_baseline": -10.361419242581528,
+    "yaw_baseline": -22.516198462163203,
+    "roll_baseline": 5.61558353917389
+  },
+  "005": {
+    "ear_baseline": 0.13632655763081833,
+    "mar_baseline": 0.13924454788335927,
+    "pitch_baseline": -9.206852393015348,
+    "yaw_baseline": -25.364680018754044,
+    "roll_baseline": 3.469897807880351
+  },
+  "006": {
+    "ear_baseline": 0.27605996121410803,
+    "mar_baseline": 0.02520222357398653,
+    "pitch_baseline": -9.406239914361796,
+    "yaw_baseline": -17.171795224650765,
+    "roll_baseline": -0.011626715181952359
+  },
+  "008": {
+    "ear_baseline": 0.27064730685541577,
+    "mar_baseline": 0.06191061731283805,
+    "pitch_baseline": 8.362806132910851,
+    "yaw_baseline": -14.073465837170556,
+    "roll_baseline": -1.615898999989089
+  },
+  "009": {
+    "ear_baseline": 0.3344096746840025,
+    "mar_baseline": 0.009165837443921411,
+    "pitch_baseline": 0.7045380311564646,
+    "yaw_baseline": -22.842223896386,
+    "roll_baseline": 1.2491017873860712
+  },
+  "010": {
+    "ear_baseline": 0.12173654716970031,
+    "mar_baseline": 0.11219146564843974,
+    "pitch_baseline": -3.5834877522147974,
+    "yaw_baseline": -13.929041156053074,
+    "roll_baseline": -3.0613203838412493
+  },
+  "011": {
+    "ear_baseline": 0.28637252283019454,
+    "mar_baseline": 0.0353312858246169,
+    "pitch_baseline": 4.8006980645074515,
+    "yaw_baseline": -21.928011029330303,
+    "roll_baseline": 6.027720662000076
+  },
+  "012": {
+    "ear_baseline": 0.28989044618474535,
+    "mar_baseline": 0.015077368413668189,
+    "pitch_baseline": -0.7096352675235094,
+    "yaw_baseline": -37.39650981598876,
+    "roll_baseline": 0.23515977314688383
+  },
+  "013": {
+    "ear_baseline": 0.1849708299076064,
+    "mar_baseline": 0.043755645926071667,
+    "pitch_baseline": -7.873474109648267,
+    "yaw_baseline": -22.860750592787383,
+    "roll_baseline": -6.666854027235334
+  },
+  "014": {
+    "ear_baseline": 0.22633459154474952,
+    "mar_baseline": 0.00892118496644213,
+    "pitch_baseline": -9.408710525738249,
+    "yaw_baseline": -21.70322050623742,
+    "roll_baseline": -1.0675642712716569
+  },
+  "015": {
+    "ear_baseline": 0.19108673248689964,
+    "mar_baseline": 0.007591056961593011,
+    "pitch_baseline": 2.9817039325730703,
+    "yaw_baseline": -33.88068305989223,
+    "roll_baseline": -1.2366528704713171
+  },
+  "016": {
+    "ear_baseline": 0.29010875734775715,
+    "mar_baseline": 0.021002993245672005,
+    "pitch_baseline": -2.75952147208744,
+    "yaw_baseline": -18.883919502328023,
+    "roll_baseline": 0.039246058455467095
+  },
+  "017": {
+    "ear_baseline": 0.26519422936285597,
+    "mar_baseline": 0.07946694061687448,
+    "pitch_baseline": 2.609721527261077,
+    "yaw_baseline": -19.048656928778005,
+    "roll_baseline": -3.4465707704579485
+  },
+  "018": {
+    "ear_baseline": 0.28392542487256867,
+    "mar_baseline": 0.00880381947159922,
+    "pitch_baseline": 1.3718420904811204,
+    "yaw_baseline": -19.4748417936831,
+    "roll_baseline": 1.939525673111466
+  },
+  "019": {
+    "ear_baseline": 0.2776757231023497,
+    "mar_baseline": 0.11161876790220442,
+    "pitch_baseline": -1.6248464155229299,
+    "yaw_baseline": -21.04211312673976,
+    "roll_baseline": 3.973648789846314
+  },
+  "020": {
+    "ear_baseline": 0.23051422546935596,
+    "mar_baseline": 0.02549973215192145,
+    "pitch_baseline": 4.228039464165248,
+    "yaw_baseline": -41.83745337771761,
+    "roll_baseline": 4.916632544180681
+  },
+  "021": {
+    "ear_baseline": 0.3147410653102967,
+    "mar_baseline": 0.013344640822536178,
+    "pitch_baseline": 7.267103440262103,
+    "yaw_baseline": -23.64326040148029,
+    "roll_baseline": -2.5946052621860543
+  },
+  "022": {
+    "ear_baseline": 0.28143816037901426,
+    "mar_baseline": 0.01679984540532555,
+    "pitch_baseline": 0.1777867380677937,
+    "yaw_baseline": -21.11438801715555,
+    "roll_baseline": -3.4637232936301388
+  },
+  "023": {
+    "ear_baseline": 0.26797211321175857,
+    "mar_baseline": 0.007718224974768954,
+    "pitch_baseline": 4.818669004807022,
+    "yaw_baseline": -30.62441428410726,
+    "roll_baseline": 0.33587113470178726
+  },
+  "024": {
+    "ear_baseline": 0.27407514725013865,
+    "mar_baseline": 0.025061029034812103,
+    "pitch_baseline": -2.524884416617426,
+    "yaw_baseline": -30.498924966146447,
+    "roll_baseline": 8.145233439182894
+  },
+  "025": {
+    "ear_baseline": 0.2878089254026258,
+    "mar_baseline": 0.012331146817045672,
+    "pitch_baseline": 0.6650150560581866,
+    "yaw_baseline": -23.276286307067167,
+    "roll_baseline": -0.48788222988260754
+  },
+  "026": {
+    "ear_baseline": 0.2443003846035468,
+    "mar_baseline": 0.007586891889023423,
+    "pitch_baseline": 0.7309248596132166,
+    "yaw_baseline": -22.323353832964116,
+    "roll_baseline": -3.0590741587676793
+  },
+  "027": {
+    "ear_baseline": 0.2408387792651543,
+    "mar_baseline": 0.05304045307351023,
+    "pitch_baseline": 0.27632127618187247,
+    "yaw_baseline": -40.28589370904922,
+    "roll_baseline": -3.8567607374693855
+  },
+  "028": {
+    "ear_baseline": 0.2367583063570779,
+    "mar_baseline": 0.042798284543575364,
+    "pitch_baseline": -6.613189253974507,
+    "yaw_baseline": -20.868404701850835,
+    "roll_baseline": 5.687597184742911
+  },
+  "029": {
+    "ear_baseline": 0.17425412780294658,
+    "mar_baseline": 0.015032198829653785,
+    "pitch_baseline": 1.7987932622817664,
+    "yaw_baseline": -23.751201337434715,
+    "roll_baseline": -0.38054759469943567
+  },
+  "030": {
+    "ear_baseline": 0.3690565396616254,
+    "mar_baseline": 0.009718535223531263,
+    "pitch_baseline": 11.61780297531367,
+    "yaw_baseline": -26.003037842577044,
+    "roll_baseline": -1.9871008506030796
+  },
+  "031": {
+    "ear_baseline": 0.2745131720613764,
+    "mar_baseline": 0.1696450853790415,
+    "pitch_baseline": 10.26675857238032,
+    "yaw_baseline": -35.509616032370616,
+    "roll_baseline": -1.9548079247058008
+  },
+  "032": {
+    "ear_baseline": 0.22276319112505372,
+    "mar_baseline": 0.03707776893696465,
+    "pitch_baseline": -3.5290723771801487,
+    "yaw_baseline": -25.72343355437127,
+    "roll_baseline": 1.3326142115947204
+  },
+  "033": {
+    "ear_baseline": 0.20280049106644782,
+    "mar_baseline": 0.03816016764894132,
+    "pitch_baseline": -1.3478630234943625,
+    "yaw_baseline": -57.86542453571123,
+    "roll_baseline": 3.620234234095628
+  },
+  "034": {
+    "ear_baseline": 0.27832630775829514,
+    "mar_baseline": 0.13898833485016288,
+    "pitch_baseline": -1.6094347052694284,
+    "yaw_baseline": -29.21906736126742,
+    "roll_baseline": 4.173129171555927
+  },
+  "035": {
+    "ear_baseline": 0.2643415869406996,
+    "mar_baseline": 0.03907863207594642,
+    "pitch_baseline": -6.169696096703092,
+    "yaw_baseline": -41.4628132623037,
+    "roll_baseline": 3.592675606877385
+  },
+  "036": {
+    "ear_baseline": 0.2471183818044554,
+    "mar_baseline": 0.033630729369389094,
+    "pitch_baseline": 3.2230399920684363,
+    "yaw_baseline": -25.65490471102904,
+    "roll_baseline": -0.6783149074618318
+  },
+  "037": {
+    "ear_baseline": 0.2782875550413594,
+    "mar_baseline": 0.010706230858859248,
+    "pitch_baseline": -2.3527378056170636,
+    "yaw_baseline": -23.542749469325518,
+    "roll_baseline": -0.14848104510725074
+  }
+}
