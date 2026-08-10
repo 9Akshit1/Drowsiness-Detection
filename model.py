@@ -1,8 +1,3 @@
-"""
-Trains classifiers on the WINDOW dataset produced by dataset_builder.py, evaluates them,
-and runs live webcam inference with the best saved model.
-"""
-
 import os
 import json
 import time
@@ -44,20 +39,19 @@ import dataset_builder as db
 OUTPUT_DIR = "outputs"
 FEATURE_COLUMNS = db.WINDOW_FEATURE_COLUMNS
 LABEL_NAMES = db.LABEL_NAMES
-ALL_LABELS = sorted(LABEL_NAMES)  # fixed label set so confusion matrices are always the same shape,
-                                  # even if a given CV fold's split happens to be missing a class
-                                  # (e.g. NTHU never produces label 1 -- see dataset_builder.py)
+ALL_LABELS = sorted(LABEL_NAMES)
 
-# --- run_live() config ---------------------------------------------------------------------
-CALIBRATION_SEC = max(8.0, db.WINDOW_SEC)  # must be >= WINDOW_SEC or the buffer isn't full yet
+CALIBRATION_SEC = max(8.0, db.WINDOW_SEC)
 STRIDE_SEC_LIVE = db.STRIDE_SEC
-LIVE_CAPTURE_WIDTH, LIVE_CAPTURE_HEIGHT = 640, 480  # plenty for EAR/MAR/pose, cuts per-frame cost
-# Cap MediaPipe calls/sec instead of running on every captured frame -- drowsiness doesn't change
-# frame-to-frame, and this is the main lever on real-time cost (MediaPipe inference dominates).
+LIVE_CAPTURE_WIDTH, LIVE_CAPTURE_HEIGHT = 640, 480
 TARGET_PROCESS_HZ = 10.0
-LIVE_DROWSY_CONFIDENCE_THRESHOLD = 0.7  # only report Drowsy above this P(Drowsy); else best non-Drowsy guess
-ENSEMBLE_TOP_N = 3  # soft-voting ensemble uses the top N models by CV test f1, not all 8 --
-                     # weaker models (e.g. decision_tree) would just dilute the vote
+LIVE_DROWSY_CONFIDENCE_THRESHOLD = 0.7
+ENSEMBLE_TOP_N = 3
+
+# num_faces is a fixed cap MediaPipe needs at creation time -- 8 covers any realistic vehicle
+# occupancy. Driver selection still runs over however many are actually found.
+LIVE_NUM_FACES = 8
+CROP_SIZE = 300
 
 FEATURE_GROUPS = {
     "eye_dynamics": ["mean_ear", "std_ear", "min_ear", "max_ear", "blink_count", "blink_freq",
@@ -67,37 +61,14 @@ FEATURE_GROUPS = {
                   "pitch_oscillation_freq", "nod_count"],
 }
 
-# Outer subject-level fold count for cross-validated evaluation (UTA-RLDD: 60 subjects / 5 folds = 12/fold).
-# NOTE: this is a class-balance-aware StratifiedGroupKFold split (seeded, reproducible via
-# RANDOM_SEED -- not the original UTA-RLDD paper's official fold assignment (that per-subject list
-# isn't available in this repo). If you obtain it, swap this out for a PredefinedSplit built from
-# that mapping instead. Automatically clamps to fewer folds for datasets with fewer subjects (e.g.
-# a partial NTHU build), so this stays dataset-agnostic.
 OUTER_FOLDS = 5
-# Inner (hyperparameter-search) fold count, used inside each outer fold's training split. Kept
-# smaller than OUTER_FOLDS purely as a compute-cost tradeoff (each inner fold multiplies grid
-# search cost) -- not a literature-backed value.
 INNER_FOLDS = 4
-# GridSearchCV's model-selection metric: macro-F1 (unweighted mean of per-class F1), chosen so
-# tuning doesn't implicitly favor the majority class -- important here since NTHU windows are
-# label-imbalanced (see build results) and UTA-RLDD's "Low Vigilant" class is naturally rarer.
 INNER_CV_SCORING = "f1_macro"
-# Fixed seed for every model constructor below, for reproducible fold results -- not a modeling
-# assumption, just a determinism choice.
 RANDOM_SEED = 42
-# Not -1 (all cores): crashes with TerminatedWorkerError on this machine once the grid got wide
-# (12 cores but limited free RAM; n_jobs=-1 oversubscribes memory, not CPU). 4 is stable.
-GRID_SEARCH_N_JOBS = 4
+GRID_SEARCH_N_JOBS = 4  # not -1: crashes with TerminatedWorkerError on this machine at n_jobs=-1
 
 
-# ---------------------------------------------------------------------------
-# Step 1-2: subject-level cross-validation split + normalize
-# ---------------------------------------------------------------------------
 def outer_subject_folds(df, n_splits=OUTER_FOLDS):
-    """Subject-level folds, stratified by label so class balance stays close to the overall
-    dataset across folds (plain GroupKFold left this to chance -- measured a 41.5%-60.3% Drowsy
-    swing fold-to-fold before switching). shuffle=True + fixed seed: reproducible, not tied to
-    row order."""
     n_subjects = df["subject_id"].nunique()
     if n_subjects < 2:
         raise ValueError(
@@ -108,9 +79,6 @@ def outer_subject_folds(df, n_splits=OUTER_FOLDS):
 
 
 def _fit_best(estimator, param_grid, X, y, groups, n_subjects):
-    """Runs GridSearchCV when there are enough distinct subjects to cross-validate hyperparameters
-    on; otherwise (a very small/partial test dataset) just fits the estimator with its defaults
-    so small runs don't crash outright -- tuning is skipped, not the whole pipeline."""
     if n_subjects < 2:
         model = clone(estimator)
         model.fit(X, y)
@@ -128,12 +96,6 @@ def fit_scaler(train_df):
 
 
 class DenseLabelClassifier(BaseEstimator, ClassifierMixin):
-    """Wraps a classifier that requires contiguous 0..k-1 class labels (XGBoost's sklearn API
-    raises "Invalid classes inferred" otherwise) so it transparently works with a sparse label
-    space -- confirmed to happen in practice: NTHU-only data only ever has labels {0, 2} (no
-    "Low Vigilant" equivalent), which crashed XGBoost with exactly that error. LightGBM and the
-    other sklearn models here handle sparse labels natively and don't need this."""
-
     def __init__(self, estimator=None):
         self.estimator = estimator
 
@@ -156,12 +118,7 @@ class DenseLabelClassifier(BaseEstimator, ClassifierMixin):
         return self.estimator_.feature_importances_
 
 
-# ---------------------------------------------------------------------------
-# Step 3-4: models + hyperparameter search
-# ---------------------------------------------------------------------------
 def build_model_grid():
-    # class_weight="balanced" is offered as an option (not forced) for the ~43/57 imbalance;
-    # GridSearchCV only uses it where it actually wins.
     grid = {
         "logistic_regression": (LogisticRegression(max_iter=2000, random_state=RANDOM_SEED),
                                  {"C": [0.01, 0.1, 1, 10], "class_weight": [None, "balanced"]}),
@@ -170,14 +127,11 @@ def build_model_grid():
         "random_forest": (RandomForestClassifier(random_state=RANDOM_SEED),
                            {"n_estimators": [100, 300], "max_depth": [5, 10, 20, None],
                             "class_weight": [None, "balanced"]}),
-        # LinearSVC not kernel SVC -- scales to this row count, CalibratedClassifierCV adds
-        # predict_proba back.
         "linear_svm": (
             CalibratedClassifierCV(LinearSVC(dual=False, max_iter=5000, random_state=RANDOM_SEED), cv=3),
             {"estimator__C": [0.1, 1, 10], "estimator__class_weight": [None, "balanced"]},
         ),
         "knn": (KNeighborsClassifier(), {"n_neighbors": [5, 15, 31, 51], "weights": ["uniform", "distance"]}),
-        # Shallow = one hidden layer. early_stopping avoids wasting iterations past convergence.
         "shallow_nn": (
             MLPClassifier(max_iter=1000, early_stopping=True, random_state=RANDOM_SEED),
             {"hidden_layer_sizes": [(16,), (32,), (64,)], "alpha": [0.0001, 0.001, 0.01]},
@@ -190,7 +144,6 @@ def build_model_grid():
              "estimator__learning_rate": [0.05, 0.1, 0.3]},
         )
     if LGBMClassifier is not None:
-        # num_leaves paired with depth so it can't exceed what the tree depth supports.
         grid["lightgbm"] = (
             LGBMClassifier(random_state=RANDOM_SEED, verbose=-1),
             [
@@ -202,15 +155,7 @@ def build_model_grid():
     return grid
 
 
-# ---------------------------------------------------------------------------
-# Step 5: evaluation
-# ---------------------------------------------------------------------------
 def evaluate(model, X, y, metric_labels=ALL_LABELS):
-    """metric_labels: the classes actually present in this dataset (NTHU only has {0,2}, no "Low
-    Vigilant") -- scoring against the full ALL_LABELS regardless drags macro F1 down by averaging
-    in a phantom always-zero class, and breaks ROC-AUC entirely since predict_proba only has
-    columns for classes the model actually saw. confusion_matrix still uses ALL_LABELS so per-fold
-    matrices stay a consistent shape to sum."""
     preds = model.predict(X)
     probs = model.predict_proba(X)
     accuracy = accuracy_score(y, preds)
@@ -218,8 +163,6 @@ def evaluate(model, X, y, metric_labels=ALL_LABELS):
         y, preds, labels=metric_labels, average="macro", zero_division=0)
     try:
         if len(metric_labels) == 2:
-            # binary roc_auc_score wants one column of positive-class scores; it infers the
-            # larger label as positive, matching metric_labels[1] since callers pass it sorted.
             pos_col = list(model.classes_).index(metric_labels[1])
             roc_auc = roc_auc_score(y, probs[:, pos_col])
         else:
@@ -257,8 +200,6 @@ def train_and_evaluate(window_csv_path, output_dir=OUTPUT_DIR, n_splits=OUTER_FO
     os.makedirs(output_dir, exist_ok=True)
     df = pd.read_csv(window_csv_path)
     groups = df["subject_id"].values
-    # Labels actually present in this dataset (e.g. NTHU-only data never has label 1, "Low
-    # Vigilant") -- see evaluate()'s docstring for why this must NOT just be ALL_LABELS.
     metric_labels = sorted(df["label"].unique().tolist())
     model_grid = build_model_grid()
     model_names = list(model_grid.keys())
@@ -348,9 +289,6 @@ def train_and_evaluate(window_csv_path, output_dir=OUTPUT_DIR, n_splits=OUTER_FO
     best_name = max(results, key=lambda n: results[n]["test_avg"]["f1"])
     print(f"Best model: {best_name} (avg test f1={results[best_name]['test_avg']['f1']:.3f})")
 
-    # Refit every model type on the full dataset for deployment (shared scaler, each with its own
-    # hyperparameter search) -- not just the winner, so run_live(ensemble=True) has a real set of
-    # independently-fit models to vote across, rather than N copies of the same one.
     final_scaler = fit_scaler(df)
     X_all = final_scaler.transform(df[FEATURE_COLUMNS])
     y_all = df["label"].values
@@ -388,9 +326,6 @@ def train_and_evaluate(window_csv_path, output_dir=OUTPUT_DIR, n_splits=OUTER_FO
 
 
 def generate_model_comparison(results, output_dir=OUTPUT_DIR):
-    """Bar chart + markdown table comparing every trained model's test-set macro metrics, so they
-    can be looked at side by side rather than only as scrolled-past per-fold console output.
-    `results` is train_and_evaluate()'s return value (or a freshly re-loaded model_results.json)."""
     names = list(results.keys())
     metrics = ["f1", "accuracy", "precision", "recall", "roc_auc"]
     values = {m: [results[n]["test_avg"].get(m) or 0.0 for n in names] for m in metrics}
@@ -419,10 +354,6 @@ def generate_model_comparison(results, output_dir=OUTPUT_DIR):
 
 def generate_feature_importance_plot(model_path=None, window_csv=None, output_dir=OUTPUT_DIR,
                                       n_repeats=10, sample_size=8000, random_state=RANDOM_SEED):
-    """Permutation importance of each individual feature on the already-trained/saved model --
-    unlike ablation_study() (which removes a whole feature GROUP and retrains from scratch), this
-    shuffles one feature at a time on the existing model and measures the F1 drop, so it ranks
-    features individually rather than by group."""
     model_path = model_path or os.path.join(output_dir, "best_model.pkl")
     payload = joblib.load(model_path)
     model, scaler, cols = payload["model"], payload["scaler"], payload["feature_columns"]
@@ -465,16 +396,9 @@ def generate_feature_importance_plot(model_path=None, window_csv=None, output_di
     return plot_path
 
 
-# ---------------------------------------------------------------------------
-# Ablation study: automated feature importance (e.g. LightGBM split/gain) only reflects what a
-# single already-fit model happened to lean on -- under collinearity (e.g. mean_ear vs. min_ear)
-# a feature can look replaceable in isolation even though removing its whole group would hurt.
-# This retrains from scratch with each logical feature group actually removed, to measure the
-# real impact on macro F1.
-# ---------------------------------------------------------------------------
 def ablation_study(window_csv_path, output_dir=OUTPUT_DIR, n_splits=OUTER_FOLDS, model_name="random_forest"):
     df = pd.read_csv(window_csv_path)
-    metric_labels = sorted(df["label"].unique().tolist())  # see evaluate()'s docstring
+    metric_labels = sorted(df["label"].unique().tolist())
     model_grid = build_model_grid()
     if model_name not in model_grid:
         raise ValueError(f"Unknown model '{model_name}', choices: {list(model_grid)}")
@@ -519,32 +443,19 @@ def ablation_study(window_csv_path, output_dir=OUTPUT_DIR, n_splits=OUTER_FOLDS,
     return results
 
 
-# ---------------------------------------------------------------------------
-# Step 6: live run
-# ---------------------------------------------------------------------------
-# _center_on_nose / _draw_points_panel / _draw_metrics_panel now live in dataset_builder.py (db.*)
-# -- annotated debug clips need the exact same panels, so they're shared there.
-
-
 def _decide_with_drowsy_threshold(probs_row, classes, threshold=LIVE_DROWSY_CONFIDENCE_THRESHOLD):
-    """Only ever returns Drowsy (label 2) if the model's own P(Drowsy) reaches `threshold`;
-    otherwise falls back to whichever non-Drowsy class is most likely. See
-    LIVE_DROWSY_CONFIDENCE_THRESHOLD's comment -- this is a deployment decision policy applied on
-    top of the model's raw probabilities, not how the model itself is trained or evaluated."""
     class_probs = dict(zip(classes, probs_row))
     drowsy_p = class_probs.get(2, 0.0)
     if drowsy_p >= threshold:
         return 2, drowsy_p
     non_drowsy = {label: p for label, p in class_probs.items() if label != 2}
-    if not non_drowsy:  # model only ever saw/predicts Drowsy -- shouldn't happen in practice
+    if not non_drowsy:
         return 2, drowsy_p
     label = max(non_drowsy, key=non_drowsy.get)
     return label, non_drowsy[label]
 
 
 def _load_ensemble(all_models_path, top_n=ENSEMBLE_TOP_N):
-    """Loads the top_n models (by CV test f1) from all_models.pkl for soft-voting. Returns
-    (scaler, feature_columns, [(name, model), ...] sorted best-first)."""
     payload = joblib.load(all_models_path)
     ranked = sorted(payload["models"].items(), key=lambda kv: kv[1]["cv_f1"], reverse=True)[:top_n]
     members = [(name, info["model"]) for name, info in ranked]
@@ -553,9 +464,6 @@ def _load_ensemble(all_models_path, top_n=ENSEMBLE_TOP_N):
 
 
 def _ensemble_predict_proba(members, X):
-    """Soft-votes by averaging predict_proba across members, aligned by class label (not raw
-    array position -- different models can order model.classes_ differently). Returns
-    (sorted_classes, avg_probs_row)."""
     classes = sorted(set(c for _, model in members for c in model.classes_))
     acc = {c: 0.0 for c in classes}
     for _, model in members:
@@ -565,16 +473,21 @@ def _ensemble_predict_proba(members, X):
     return classes, np.array([acc[c] for c in classes])
 
 
+def _select_driver_face(face_landmarks_list):
+    if len(face_landmarks_list) <= 1:
+        return 0
+    nose_idx = db.LANDMARK_IDS["nose_tip"]
+    scores = [lm[nose_idx].x - lm[nose_idx].z for lm in face_landmarks_list]
+    return int(np.argmax(scores))
+
+
 def _status_panel(width, text):
-    """One-line status panel for run_live() -- shown below the video whenever there's no real
-    classification yet (calibrating / buffer still filling), so the window is never just silent."""
     panel = np.zeros((50, width, 3), dtype=np.uint8)
     cv2.putText(panel, text, (10, 32), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 220, 255), 1)
     return panel
 
 
-MIN_DT_SEC = 1.0 / 60.0  # floor for velocity dt -- a backlog-delivered frame burst can otherwise
-                          # give a near-zero dt and blow up angle_change/dt into a fake spike
+MIN_DT_SEC = 1.0 / 60.0
 
 
 def run_live(model_path=os.path.join(OUTPUT_DIR, "best_model.pkl"), camera_id=0,
@@ -587,22 +500,24 @@ def run_live(model_path=os.path.join(OUTPUT_DIR, "best_model.pkl"), camera_id=0,
         bundle = joblib.load(model_path)
         model, scaler, feature_columns = bundle["model"], bundle["scaler"], bundle["feature_columns"]
 
-    face_landmarker = db._open_face_landmarker()
+    face_landmarker = db._open_face_landmarker(num_faces=LIVE_NUM_FACES)
     cap = cv2.VideoCapture(camera_id)
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, LIVE_CAPTURE_WIDTH)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, LIVE_CAPTURE_HEIGHT)
-    cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # always grab the freshest frame, not a queued backlog
+    cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 
     print("Press 'c' to calibrate (look forward, stay neutral), 'q' to quit.")
 
     baseline = None
     calibrating_until = None
     calib_rows = []
-    rolling_buffer = deque()  # trimmed to the last WINDOW_SEC of wall-clock time, not a frame count
+    calib_positions = []
+    fixed_crop = None
+    rolling_buffer = deque()
     buffer_start_time = None
 
     prev_pitch = prev_yaw = prev_roll = prev_frame_time = None
-    classification, confidence, stats, stats_panel = "Calibrating...", 0.0, None, None
+    last_stats, last_window_span, last_extra_lines = None, 0.0, None
     last_window_time = 0.0
     last_process_time = 0.0
     min_process_interval = 1.0 / TARGET_PROCESS_HZ
@@ -613,12 +528,18 @@ def run_live(model_path=os.path.join(OUTPUT_DIR, "best_model.pkl"), camera_id=0,
             break
         now = time.time()
 
+        if fixed_crop is not None:
+            x0, y0, x1, y1 = fixed_crop
+            frame = frame[y0:y1, x0:x1]
+
         key = cv2.waitKey(1) & 0xFF
         if key == ord("q"):
             break
         if key == ord("c"):
             calibrating_until = now + CALIBRATION_SEC
             calib_rows = []
+            calib_positions = []
+            fixed_crop = None
             print(f"Calibrating for {CALIBRATION_SEC:.0f}s, look forward and stay neutral...")
 
         if now - last_process_time < min_process_interval:
@@ -631,12 +552,13 @@ def run_live(model_path=os.path.join(OUTPUT_DIR, "best_model.pkl"), camera_id=0,
 
         norm_pts, raw_pts_centered = {}, {}
         if result.face_landmarks:
-            landmarks = result.face_landmarks[0]
+            face_idx = _select_driver_face(result.face_landmarks)
+            landmarks = result.face_landmarks[face_idx]
             pts = {name: db._landmark_px(landmarks[idx], w, h) for name, idx in db.LANDMARK_IDS.items()}
             for x, y, _ in pts.values():
                 cv2.circle(frame, (int(x), int(y)), 1, (0, 255, 0), -1)
 
-            pose = db._rotation_from_result(result)
+            pose = db._rotation_from_result(result, face_idx)
             if pose is not None:
                 pitch, yaw, roll, _ = pose
                 norm_pts = db.normalize_landmarks(pts)
@@ -658,6 +580,7 @@ def run_live(model_path=os.path.join(OUTPUT_DIR, "best_model.pkl"), camera_id=0,
                 rolling_buffer.append(row)
                 if calibrating_until is not None:
                     calib_rows.append(row)
+                    calib_positions.append(pts["nose_tip"][:2])
             prev_frame_time = now
 
         while rolling_buffer and now - rolling_buffer[0]["time_sec"] > db.WINDOW_SEC:
@@ -667,7 +590,15 @@ def run_live(model_path=os.path.join(OUTPUT_DIR, "best_model.pkl"), camera_id=0,
             if calib_rows:
                 baseline = db.compute_baseline(pd.DataFrame(calib_rows))
                 print("Calibration complete:", baseline)
-            calibrating_until, calib_rows = None, []
+            if calib_positions:
+                cx = float(np.mean([p[0] for p in calib_positions]))
+                cy = float(np.mean([p[1] for p in calib_positions]))
+                half = CROP_SIZE // 2
+                x0 = int(np.clip(cx - half, 0, max(0, w - CROP_SIZE)))
+                y0 = int(np.clip(cy - half, 0, max(0, h - CROP_SIZE)))
+                fixed_crop = (x0, y0, min(x0 + CROP_SIZE, w), min(y0 + CROP_SIZE, h))
+                print(f"Fixed crop set at {fixed_crop} -- no further continuous face tracking.")
+            calibrating_until, calib_rows, calib_positions = None, [], []
 
         raw_panel = db._draw_points_panel(db.PANEL_SIZE, raw_pts_centered, "RAW 3D")
         frontal_panel = db._draw_points_panel(db.PANEL_SIZE, norm_pts, "FRONTAL (normalized)")
@@ -689,11 +620,12 @@ def run_live(model_path=os.path.join(OUTPUT_DIR, "best_model.pkl"), camera_id=0,
             pred, confidence = _decide_with_drowsy_threshold(probs, classes)
             classification = LABEL_NAMES.get(pred, str(pred))
             last_window_time = now
-            extra_lines = [f"Prediction: {classification}   Confidence: {confidence * 100:.1f}%"]
-            stats_panel = db._draw_metrics_panel(combined.shape[1], stats, window_span, extra_lines)
+            last_extra_lines = [f"Prediction: {classification}   Confidence: {confidence * 100:.1f}%"]
+            last_stats, last_window_span = stats, window_span
 
-        if stats_panel is not None:
-            combined = np.vstack([combined, stats_panel])
+        if last_stats is not None:
+            combined = np.vstack([combined, db._draw_metrics_panel(combined.shape[1], last_stats,
+                                                                     last_window_span, last_extra_lines)])
         else:
             if calibrating_until is not None:
                 status = f"Calibrating... {max(0.0, calibrating_until - now):.1f}s left"

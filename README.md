@@ -72,3 +72,29 @@ python model.py live --camera-id 0
 Press `c` to calibrate, `q` to quit. Only reports "Drowsy" above `LIVE_DROWSY_CONFIDENCE_THRESHOLD`
 (default 70%); otherwise shows the next most likely state. Add `--ensemble` to soft-vote across the
 top `ENSEMBLE_TOP_N` models (by CV f1) from `outputs/all_models.pkl` instead of using a single model.
+
+Calibration also picks the driver (rightmost + forward-most face, for a cabin-facing camera) and
+fixes a crop around their head position for the rest of the session — see METHODS.md for details
+and its caveats (not yet tested against a real vehicle camera).
+
+## 4. Deployment (`drowsiness_live.py`)
+
+Same live inference, but a single self-contained file with no dependency on `dataset_builder.py`
+or `model.py` — for copying onto a deployment device (e.g. a Raspberry Pi) without the training
+code.
+
+```bash
+python drowsiness_live.py --camera-id 0
+```
+
+Same flags and behavior as `python model.py live` (`--model-path`, `--ensemble`, `--ensemble-path`,
+`--ensemble-top-n`).
+
+**Minimum files needed on the deployment device:**
+- `drowsiness_live.py`
+- `outputs/best_model.pkl` (single model), or `outputs/all_models.pkl` too if using `--ensemble`
+- `models/face_landmarker.task` (or let it auto-download on first run, if the device has internet)
+
+Python packages: `opencv-python`, `numpy`, `pandas`, `joblib`, `mediapipe`, `scipy`, `scikit-learn`
+(needed to unpickle the saved model even though it's never imported directly) — plus `xgboost`
+and/or `lightgbm` if the deployed model (or any `--ensemble` member) uses one.

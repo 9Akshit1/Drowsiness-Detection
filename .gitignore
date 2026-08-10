@@ -1,5 +1,6 @@
 venv
 openh264-*.dll
+models/
 
 NTHU/*
 !NTHU/structure.txt

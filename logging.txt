@@ -1,0 +1,259 @@
+June 12, 2026:
+Main factors for driver fatigue detection via Camera input:
+- EAR -- done
+- MAR (yawning)  -- done
+- PERCLOS (eye closure over time, basically blink frequency)  -- done
+- Head tilt/nodding  -- done  (dont include gaze for now)
+
+Calculations and methods used to extract those features were found from various githubs (everything is in the 'old' folder, which may have been deleted. So if needed, go throguh the github commits to find it): 
+- https://github.com/yaninsanity/openeyes/tree/main
+- https://github.com/SeajalUniyal/driver_fatigue_detection/tree/main
+- https://github.com/erlendskinnemoen/Driver-Monitoring-Systems-using-Google-s-MediaPipe-FaceMesh/tree/main
+- https://github.com/Kartheepan-M/Drowsiness-Detection-using-mediapipe-python/tree/main
+
+Not including driver gaze (aka DISTRACTION DETECTION) for now as that was already done in the previous project (Car-Sensors).
+
+------------------------------------------------------------------------------------------------------------------------------------------
+
+June 26, 2026:
+Add the following stuff:
+- Parameters should be time dependent (like motion based; for example, for head nodding, it should be based on the motion of the head not jsut the final position.) isntead of just position to be more robust
+- Lookup table (write it in the code and make it easy to change like a dictionary or something probably) of thresholds (backed by research) consisting of different classificaitons ---- by lookup table it would be like at [parameter] of [threshold] and [parameter] of [threshold], droswiness is [value/classfiication] --- jsut choose hatever methdolgoy seems ebst
+- get a visual video dataset for driver drowsiness (found two!), so we can make a simple classifier (where you can calculate the thresholds and weights from that to be able to create a better lookup table)
+
+Resources:
+- "Improving Driver Drowsiness Detection via Personalized EAR/MAR Thresholds and CNN-Based Classification" (2026)
+- "A Multimodal Systematic Review of Drivers' Fatigue Detection Methodologies, Datasets, and Models" (2026)
+- "Drowsiness Detection in Drivers Using Facial Feature Analysis" (2025)
+
+Summary:
+This project implements a robust, real-time driver drowsiness monitoring system optimized for edge computing environments. 
+By integrating computer vision with adaptive signal processing, the system tracks key behavioral indicators—specifically 
+Eye Aspect Ratio (EAR), Mouth Aspect Ratio (MAR), blink frequency, and Percent of Eye Closure (PERCLOS)—alongside dynamic head-pose motion metrics, 
+such as angular velocity of pitch and tilt. To ensure environmental robustness, the system features a dynamic calibration 
+phase that establishes personalized baseline thresholds for each driver, mitigating variations in facial structure and lighting. 
+To move beyond static rule-based alerts, the system utilizes a lightweight ensemble learning classifier trained on a multi-feature
+dataset. This classifier evaluates a continuous vector of temporal behavioral data, enabling higher-fidelity detection of early-
+stage fatigue compared to conventional threshold-gating methods.
+
+------------------------------------------------------------------------------------------------------------------------------------------
+
+July 3rd, 2026:
+make a landmark raw dataset (like just the eyes, nose, mouth landmarks; obviously normalized into frontal pose) --> then create a dataset for the processed data (like features)
+Add the mean & standard deviation for all features (over time)  -- each row of data will be a frame of a video, and the features of that frame (let's say we have 10 data rows per second, sicne cameras run at 30 fps, the featue can be calcualted over 3 frames?)
+time window used to calculate the features is __
+EAR  -- ratio  (dimensionless)
+MAR  -- ratio  (dimensionless)
+PERCLOS  -- time bounding
+Nodding -- speed, direction
+Camera Position Normalization (important):
+We start our alignment process by extracting 9 2D facial landmark points as temporary anchor points. The points are corners of both eyes and mouth, center of the brows and tip of the nose as illustrated in Fig. 2a. They are used to approximate the pose matrix P given by
+by applying POSIT algorithm [23] in which R is a rotation matrix, 
+is a translation vector. After obtaining these parameters, the reference 3D face model is then rotated and translated to align with the 2D facial image plane. Four affine transformations are respectively applied on each eye, nose and mouth regions to warp 2D anchor points to the xy-image plane of the 3D reference face (Fig. 2b). This generates a 3D-aligned version of the 2D facial contour and the corresponding depth information of each facial point can be estimated [24].
+
+NTHU Dataset Structure (https://link.springer.com/chapter/10.1007/978-3-319-54526-4_9):
+There are 36 subjects numbered like 010 or 021, etc...
+Alert videos
+- normal driving
+- talking
+- laughing
+- looking left/right
+Drowsy videos
+- yawning
+- slow blinking (high PERCLOS)
+- falling asleep
+- repeated nodding
+- combinations of these behaviors
+The original recordings are about 1–1.5 minutes for each behavior, and they also provide longer 2–10 minute mixed videos that contain transitions between alert and drowsy states.
+Therefore, the 1-1.5 minute videos of justo ne single pure behaivor, makes them easy for labeling as either "Alert" or "Drowsy". 
+But for the mixed videos, these contain transitions meaning you cannot simply label every window as "drowsy." So, we'll probably ignore these videos or will ahve to later manually determine which portions correspond to alert versus drowsy behavior.
+
+UTA-RLLD Dataset Structure:
+One entire video = one labeled sample.
+Each video is 10 minutes long or slightly longer.
+For each of the 60 subjects (labelled 1, 2, .... 60), the dataset contains exactly 3 videos:
+Data Folder: UTA-RLLD
+Struture within the data folder: Folders for each subject (folder names are just the subject ID. ex: 1, 2, 3, ..., 60)
+Structure within the subject folder: 0.mp4 (label: Alert), 5.mp4 (label: Low Vigilant), 10.mp4 (label: Drowsy)
+
+DATASET PLAN (dataset_builder.py):
+Step 1 — Extract Facial Landmarks
+For every frame:
+- Detect the face.
+- Estimate the facial landmarks (MediaPipe Face Mesh).
+- Estimate head pose (pitch, yaw, roll).
+- Normalize the landmarks to a frontal reference pose (remove camera orientation as much as possible). 
+- Store the raw and normalized landmarks into a dataset (this is the RAW DATASET). 
+
+Subject Calibration (performed once per subject)
+For each subject, use the Alert (0.mp4) recording to establish a personalized physiological baseline.
+Using the first 5–10 seconds of the Alert video:
+Extract facial landmarks.
+Compute the frame-level features.
+Calculate the mean values of:
+- EAR
+- MAR
+- Head pitch
+- Head yaw
+- Head roll
+Store these values as the subject-specific baseline:
+- EAR_baseline
+- MAR_baseline
+- Pitch_baseline
+- Yaw_baseline
+- Roll_baseline
+Save these baseline values as metadata associated with the subject. These baselines are then used to normalize the features extracted from all three videos (Alert, Low Vigilant, and Drowsy) belonging to that subject.
+Then for the actual dataset construction in the steps below for the other videos (0.mp4, 5.mp4, 10.mp4), normalize the frame-level physiological features of every video, including the Alert video itself, using the subject-specific baseline values.
+
+Step 2 — Compute Frame-Level Features
+For every video:
+Now convert the landmarks into meaningful measurements.
+For every frame calculate:
+- EAR (Eye Aspect Ratio)
+- MAR (Mouth Aspect Ration)
+- Head pitch
+- Head yaw
+- Head roll
+- Head pitch velocity = (pitch_i - pitch_(i-1))/Δt   (i = current frame)
+- Head yaw velocity = (yaw_i - yaw_(i-1))/Δt         (i = current frame)
+- Head roll velocity = (roll_i - roll_(i-1))/Δt      (i = current frame)
+Store this into a dataset (this is the FRAME-LEVEL DATASET).
+
+Step 3 — Create Sliding Windows and compute temporal data
+Now divide the video into overlapping windows.
+For example:
+- Window length = 5 seconds
+- Stride = 1 second
+Each window contains 150 frames (assuming 30 fps).
+If a video is 2 min long, then you would have 116 windows.
+Instead of feeding all 150 frames into the classifier, summarize the driver's behavior during that window.
+- Mean EAR
+- Standard deviation
+- Minimum EAR
+- Maximum EAR
+- Blink count
+- Blink frequency
+- Average blink duration
+- Maximum blink duration
+- PERCLOS = Closed-eye frames / Total frames
+- Mean MAR
+- Maximum MAR
+- Standard deviation
+- Yawn count
+- Average yawn duration
+- Mean pitch
+- Pitch standard deviation
+- Maximum pitch velocity
+- Average pitch velocity
+- Pitch oscillation frequency
+- Number of nodding events
+- Label
+Store this into a dataset (this is the WINDOW DATASET).
+
+------------------------------------------------------------------------------------------------------------------------------------------
+
+July 10, 2026:
+MACHINE LEARNING PLAN (model.py):
+Step 1 — Split the Dataset
+Split the dataset by subject, ensuring that all windows from a given subject belong exclusively to either the training or testing set. This prevents data leakage and evaluates the model's ability to generalize to unseen drivers.
+Use the predefined 5-fold subject split provided by the UTA-RLDD dataset (12 subjects per fold). Train on four folds and evaluate on the remaining fold, repeating this process for all five folds and averaging the results.
+Now you're testing whether your model generalizes to new people, which is the real deployment scenario.
+
+Step 2 — Normalize Features
+Different features have different units.
+A model trains better if these are standardized (use the standardizaiton formula, meaning you need to compute the feature means and standard deviations using only the training set. Apply the same transformation to both the training and testing sets.).
+
+Step 3 — Train Several Models
+Train several lightweight classifiers and compare them.
+Model	Why
+Logistic Regression	Simple baseline
+Decision Tree	Interpretable
+Random Forest	Usually performs very well
+XGBoost / LightGBM	Often best accuracy
+Linear SVM	Good baseline
+For tree-based models (Decision Tree, Random Forest, XGBoost, LightGBM), extract feature importance scores to identify the behavioral indicators contributing most to the predictions.
+
+Step 4 — Hyperparameter Optimization
+Perform Grid Search or Random Search with cross-validation using only the training folds to identify the optimal hyperparameters for each model.
+
+Step 5 — Evaluate on training and testing set
+Output Accuracy, Precision, Recall, Macro F1 Score, Confusion Matrix for each model and store the results in some file (json, yaml, etc...).
+Average all metrics across the five subject folds.
+
+Step 6 — Save the Best Model
+Save best_model.pkl or best_model.onnx. Also save feature_scaler.pkl because you'll need the exact same standardization during deployment.
+
+Step 7 — Real-Time Inference
+After saving the models, we can load the best model for a live run where we use this computer's camera ID=0 to do real-time classification.
+At first, let the user calibrate their normal awake stuff, by letting them press a key (C) and then doing the calibration stuff (Collect 5–10 seconds of the data, Compute baseline, Store, Start inference. Just like how the datatset builder does it).
+On the output, you should dispaly the landmarks (small points) on the live feed, with both the live landmark 3D face and the normalized frontal-faced 3D model thing too.
+Also display the features results, like the PERCLOS, MAR, EAR, Pitch Velocity, blink count & frequency, yawn count, etc... dont display them on the feed directly. Have them dispalyed in a rectnagular box right below the live feed, becuase I dont want these stats to overload the live feed and make it cluttered.
+Then obviously display the loaded model's output classification.
+
+GUI (but you would also have the two 3D models of the head on the side too. One is the raw 3D model of the head from the video. One is the normalized frontal-face of it.):
+----------------------------------------
+|                                      |
+|                                      |
+|          Live Camera Feed            |
+|                                      |
+|     facial landmarks + head pose     |
+|                                      |
+----------------------------------------
+----------------------------------------
+|  EAR:                    0.81        |
+|  PERCLOS:               12%          |
+|  Blink Rate:            18/s         |
+|  Blink Count:            2           |
+|  MAR:                   0.42         |
+|  Yawn Count:             0           |
+|  Pitch Velocity:       17°/s         |
+|  Nod Count:              0           |
+|  Nod Rate:              0/s          |
+|                                      |
+|  Prediction: DROWSY                  |
+|  Confidence: 93.4%                   |
+----------------------------------------
+
+During runtime, every frame has the below pipeline occuring but we want it smooth and fast:
+Camera, then MediaPipe, then Landmarks, then Frame features, then Sliding window, then Window features, then Load scaler, then Standardize (using the saved scaler), then Load model, then Predict
+
+------------------------------------------------------------------------------------------------------------------------------------------
+
+July 19-24, 2026:
+Identified bugs like:
+- Noticed that the ML model was giving F1 scores of around 0.44. These are terrible valeusa nd soem of the causes were:
+- pitch/yaw/roll velocity uses a circular (wraparound-safe) angle difference, not naive subtraction -- naive subtraction spiked to ~43,000 deg/s across the +-180 wrap boundary, which is what caused nod-count to trigger every few seconds and pitch-velocity readouts to look wrong in the annotated demo.
+- nod counting is based on angular-prominence peak detection on the pitch signal itself (a genuine nod is a distinct, sufficient excursion), corroborated by a velocity check, instead of counting every raw velocity-threshold crossing.
+- Each frame isnt encessarily the exact video's label. So, we shjould discard the first few minutes of the video.
+- The 3D normalization was failing to work properly causing upside down views or flickerign views.
+- The counts and rates explode or increase even when there was only one event. Like if it was one long held yawn or blink, the coutn and rates would icnrease even though its technically only one event.
+
+------------------------------------------------------------------------------------------------------------------------------------------
+
+July 31st, 2026:
+- Implement a KNN, a Shallow Neural Net. 
+- Draw up a plot/table of all the tested models' evaluation metrics
+- For LEARNING: Learn more indepthly, including the claculations for the ML models. Go to https://carleton.ca/trustcav/workshops-seminars-events/ (password is 2025) and watch the first lecture.
+- Try a longer video size like 10s or 20s, because you are more likely to be drowsy over a longer time
+- For the confidence threshold, instead of doing 50-50 (like if >50% is predicted as drowsy, do drowsy), do like 70% of votes need to be drowsy for it to be drowsy
+- The feature extraction seems too slow, so somethign is causign a bottleneck in the clacualtiosn somehow. Like when i blink fast, it only record a few of those blinks. Similarily, the other features are also feeling very slow to clacualte and update
+- Should the rates be clacualted out of a mintue. I feel like it would make mroe sense to divide it by the time window and keep it out of seconds.
+- Pitch velocity seems maybe slightly wrongly claculated? Like it said i only moved a few degrees even though I moved a decent amount. SO jsut veirfy the claculation.
+- Switch to lower FPS or make the sliding to next window size liek 10 frames instead of 1 frame.
+
+------------------------------------------------------------------------------------------------------------------------------------------
+
+August 7th, 2026:
+- The stride is 1.0 second. The window is 10.0 seconds. The FPS is now 10 fps.
+- Metrics are faster updating now which is good and they seem correct like EAR, MAR, PERCLOS. It's still kinda hard to fully validate pitch velocity but it should be fine surely right? Rates feel kinda pointless/useless in my opinion though. Might need to check feature importance soon to see how important each feature truly is. That way we can display the actually important features in the live GUI instead.
+- Surprisingly, the shallow NN has the lowest latency (0.25ms taken for a prediction each second) and sitll ahs the highest accuracy in all metrics. Crazy.
+- Model prediction feels a little slow as in like, I have to wait a decent amount of time when doing it live for it to switch correctly from drowsy to alert or vie versa. 
+- We can try saving all of the best models from each type and then making them do an ensemble vote for the prediction isntead. But wouldnt this make it kinda slow? Estiamte how slwo thsi woudl maek the real time thing then.
+- We also want a 300x300 crop at the face, fidnign the rightmost and forwardmost face which is the driver. We figure otu the position of the face from the calibration averaging and do a fixed crop on that.
+- Based on all of the changes we made, I'm wondering if I should rerun the whole dataset again. Should I try using both UTA-RLDD and NTHU for data training or just leave it at NTHU and then use for real deployment.
+- 3D Pose Normalization seems fine to me to be honest, I dont see the need to change it to follow the distraction detection code. We'll probably need to do some sort of comparison or updates with the distraction detection to see if the 3D normalziation used here is better/faster, and also test diff camera angles in thsi drowsienss detection code to see (ideally try from the driver mirror angle, just to see if its still able to extract params properly).
+- Lastly, since this project is done essentially, we can start merging it with the distraction detection code (repository Car-Sensors), since everything up to the mediapipi landmark stuff is the same.
+
+August 9th, 2026:
+- Created drowsiness_detection.py that basically jsut does the live inference, ebcause I realzied that for deployment, that's all we need (just running the models live, no training stuff).
+- YAY everything is done and works nicely. Will soon merge this with the Distraction Detection.
