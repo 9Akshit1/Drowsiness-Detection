@@ -16,6 +16,7 @@ from mediapipe.tasks.python.vision import FaceLandmarker, FaceLandmarkerOptions,
 from scipy.signal import find_peaks
 
 OUTPUT_DIR = "outputs"
+CAMERA_ID = 1
 
 WINDOW_SEC = 10.0
 STRIDE_SEC = 1.0
@@ -545,7 +546,7 @@ def run_live(model_path, camera_id=0, ensemble=False,
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--camera-id", type=int, default=0)
+    parser.add_argument("--camera-id", type=int, default=CAMERA_ID)
     parser.add_argument("--model-path", default=os.path.join(OUTPUT_DIR, "best_model.pkl"))
     parser.add_argument("--ensemble", action="store_true")
     parser.add_argument("--ensemble-path", default=os.path.join(OUTPUT_DIR, "all_models.pkl"))
