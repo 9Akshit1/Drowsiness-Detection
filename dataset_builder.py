@@ -93,9 +93,9 @@ LANDMARK_IDS = {
     "right_eye_inner": 362, "right_eye_top1": 385, "right_eye_top2": 387,
     "right_eye_outer": 263, "right_eye_bottom1": 373, "right_eye_bottom2": 380,
     "mouth_left": 61, "mouth_right": 291,
-    "mouth_top_outer": 13, "mouth_bottom_outer": 14,
-    "mouth_top_left": 81, "mouth_bottom_left": 178,
-    "mouth_top_right": 311, "mouth_bottom_right": 402,
+    "mouth_top_outer": 0, "mouth_bottom_outer": 17,
+    "mouth_top_left": 39, "mouth_bottom_left": 181,
+    "mouth_top_right": 269, "mouth_bottom_right": 405,
 }
 
 LEFT_EYE = ("left_eye_outer", "left_eye_top1", "left_eye_top2",
@@ -532,9 +532,11 @@ def _summarize_window(chunk, fps):
     ear, mar = chunk["ear"].values, chunk["mar"].values
     pitch, pitch_vel = chunk["pitch_norm"].values, chunk["pitch_vel"].values
 
-    min_blink_frames = max(1, round(MIN_BLINK_DURATION_SEC * fps))
+    # floor of 2 -- at low live sample rates a single noisy frame would otherwise count as a
+    # full blink/yawn with zero debounce (a no-op at dataset-build's native fps, always >= 2 there)
+    min_blink_frames = max(2, round(MIN_BLINK_DURATION_SEC * fps))
     blink_merge_gap_frames = max(1, round(BLINK_MERGE_GAP_SEC * fps))
-    min_yawn_frames = max(1, round(MIN_YAWN_DURATION_SEC * fps))
+    min_yawn_frames = max(2, round(MIN_YAWN_DURATION_SEC * fps))
     yawn_merge_gap_frames = max(1, round(YAWN_MERGE_GAP_SEC * fps))
 
     motion_ok = (chunk["pitch_vel"].abs().values + chunk["yaw_vel"].abs().values) <= MOTION_GATE_DEG_S

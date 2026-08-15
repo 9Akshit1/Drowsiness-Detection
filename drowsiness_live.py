@@ -14,6 +14,7 @@ import mediapipe as mp
 from mediapipe.tasks.python import BaseOptions
 from mediapipe.tasks.python.vision import FaceLandmarker, FaceLandmarkerOptions, RunningMode
 from scipy.signal import find_peaks
+from sklearn.base import clone, BaseEstimator, ClassifierMixin
 
 OUTPUT_DIR = "outputs"
 CAMERA_ID = 1
@@ -72,9 +73,9 @@ LANDMARK_IDS = {
     "right_eye_inner": 362, "right_eye_top1": 385, "right_eye_top2": 387,
     "right_eye_outer": 263, "right_eye_bottom1": 373, "right_eye_bottom2": 380,
     "mouth_left": 61, "mouth_right": 291,
-    "mouth_top_outer": 13, "mouth_bottom_outer": 14,
-    "mouth_top_left": 81, "mouth_bottom_left": 178,
-    "mouth_top_right": 311, "mouth_bottom_right": 402,
+    "mouth_top_outer": 0, "mouth_bottom_outer": 17,
+    "mouth_top_left": 39, "mouth_bottom_left": 181,
+    "mouth_top_right": 269, "mouth_bottom_right": 405,
 }
 LEFT_EYE = ("left_eye_outer", "left_eye_top1", "left_eye_top2",
             "left_eye_inner", "left_eye_bottom1", "left_eye_bottom2")
@@ -110,6 +111,33 @@ REFERENCE_FACE_SHAPE = {
     "mouth_bottom_right": (24.5, -56.0, 48.8),
 }
 REFERENCE_LANDMARK_ORDER = list(LANDMARK_IDS)
+
+
+class DenseLabelClassifier(BaseEstimator, ClassifierMixin):
+    """Needed only so joblib can unpickle model bundles saved with this class (see model.py)."""
+    def __init__(self, estimator=None):
+        self.estimator = estimator
+
+    def fit(self, X, y, **kwargs):
+        self.classes_ = np.unique(y)
+        to_dense = {label: i for i, label in enumerate(self.classes_)}
+        y_dense = np.array([to_dense[v] for v in y])
+        self.estimator_ = clone(self.estimator)
+        self.estimator_.fit(X, y_dense, **kwargs)
+        return self
+
+    def predict(self, X):
+        return self.classes_[self.estimator_.predict(X)]
+
+    def predict_proba(self, X):
+        return self.estimator_.predict_proba(X)
+
+    @property
+    def feature_importances_(self):
+        return self.estimator_.feature_importances_
+
+
+sys.modules["__main__"].DenseLabelClassifier = DenseLabelClassifier
 
 
 def _ensure_face_landmarker_model():
@@ -316,9 +344,9 @@ def _summarize_window(chunk, fps):
     ear, mar = chunk["ear"].values, chunk["mar"].values
     pitch, pitch_vel = chunk["pitch_norm"].values, chunk["pitch_vel"].values
 
-    min_blink_frames = max(1, round(MIN_BLINK_DURATION_SEC * fps))
+    min_blink_frames = max(2, round(MIN_BLINK_DURATION_SEC * fps))
     blink_merge_gap_frames = max(1, round(BLINK_MERGE_GAP_SEC * fps))
-    min_yawn_frames = max(1, round(MIN_YAWN_DURATION_SEC * fps))
+    min_yawn_frames = max(2, round(MIN_YAWN_DURATION_SEC * fps))
     yawn_merge_gap_frames = max(1, round(YAWN_MERGE_GAP_SEC * fps))
 
     motion_ok = (chunk["pitch_vel"].abs().values + chunk["yaw_vel"].abs().values) <= MOTION_GATE_DEG_S
@@ -379,15 +407,6 @@ def _ensemble_predict_proba(members, X):
         for c, p in zip(model.classes_, probs):
             acc[c] += p / len(members)
     return classes, np.array([acc[c] for c in classes])
-
-
-def _select_driver_face(face_landmarks_list):
-    # rightmost + closest to camera == the driver, for a cabin-facing camera, left-hand-drive
-    if len(face_landmarks_list) <= 1:
-        return 0
-    nose_idx = LANDMARK_IDS["nose_tip"]
-    scores = [lm[nose_idx].x - lm[nose_idx].z for lm in face_landmarks_list]
-    return int(np.argmax(scores))
 
 
 def _status_panel(width, text):
@@ -457,7 +476,7 @@ def run_live(model_path, camera_id=0, ensemble=False,
 
         norm_pts, raw_pts_centered = {}, {}
         if result.face_landmarks:
-            face_idx = _select_driver_face(result.face_landmarks)
+            face_idx = 0
             landmarks = result.face_landmarks[face_idx]
             pts = {name: _landmark_px(landmarks[idx], w, h) for name, idx in LANDMARK_IDS.items()}
             for x, y, _ in pts.values():

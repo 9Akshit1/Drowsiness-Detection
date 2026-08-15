@@ -84,11 +84,11 @@ or `model.py` — for copying onto a deployment device (e.g. a Raspberry Pi) wit
 code.
 
 ```bash
-python drowsiness_live.py --camera-id 0
+python drowsiness_live.py
+python drowsiness_live.py --camera-id 0 --ensemble --ensemble-path outputs/all_models.pkl --ensemble-top-n 3
 ```
 
-Same flags and behavior as `python model.py live` (`--model-path`, `--ensemble`, `--ensemble-path`,
-`--ensemble-top-n`).
+Other flags: `--model-path`, `--ensemble`, `--ensemble-path`, `--ensemble-top-n`.
 
 **Minimum files needed on the deployment device:**
 - `drowsiness_live.py`
